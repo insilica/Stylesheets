@@ -14,17 +14,36 @@
       system.aarch64-darwin
     ] (system:
       let pkgs = nixpkgs.legacyPackages.${system};
-      in with pkgs; {
-        packages = { inherit source; };
-        devShells.default = mkShell {
-          buildInputs = [
-            ant
-            jdk11
-            libxml2
-            nodejs
-            perl
-            texlive.combined.scheme-full
+          runtimePkgs = [
+            pkgs.ant
+            pkgs.jdk11
+            pkgs.libxml2
+            pkgs.nodejs
+            pkgs.perl
+            pkgs.texlive.combined.scheme-full
           ];
+          app = pkgs.runCommand "app" {} ''
+            mkdir -p $out/app
+            cp -r ${self}/. $out/app
+          '';
+      in {
+        packages = { inherit runtimePkgs; };
+        devShells.default = pkgs.mkShell {
+          buildInputs = runtimePkgs ++ [ pkgs.clojure ];
+        };
+        image = pkgs.dockerTools.buildLayeredImage {
+          name = "insilica/Stylesheets";
+          tag = "latest";
+          contents = pkgs.buildEnv {
+            name = "image-root";
+            paths = runtimePkgs ++ [ app pkgs.bash pkgs.coreutils];
+            pathsToLink = [ "/bin" "/etc" "/var" "/app" ];
+          };
+          config = {
+            WorkingDir = "/app";
+            Cmd = ["/bin/java" "-jar" "target/stylesheets.jar"];
+            ExposedPorts = { "7979/tcp" = {}; };
+          };
         };
       });
 }
