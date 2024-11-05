@@ -8,28 +8,37 @@
             [ring.middleware.multipart-params.temp-file :as tf])
   (:gen-class))
 
+(def bin-folder (fs/path (fs/cwd) "bin"))
+
 (defn transform-tei-handler [bin-path]
-  (fn [request]
-    (fs/with-temp-dir [out-dir {:prefix "transform-tei-"}]
-      (let [tempfile (get-in request [:params "file" :tempfile])
-            out-path (fs/path out-dir "out")
-            cmd [bin-path tempfile out-path]
-            {:keys [exit err]} (apply shell {:continue true :err :string} cmd)]
-        (if (zero? exit)
-          (do
-            ;; Move the output into the input `tempfile` because it's
-            ;; being tracked for deletion by ring.middleware.multipart-params.temp-file
-            ;; Very cheesey, but effective
-            (fs/move out-path tempfile {:replace-existing true})
-            {:status 200
-             :body tempfile})
-          {:status 500
-           :body (str "Failed transform (exit code " exit "): " err)})))))
+  (letfn [(exec [in-file out-file]
+            (let [cmd ["bash" "-c"
+                       (str bin-path " " in-file " " out-file)]]
+              (apply shell {:dir bin-folder
+                            :continue true
+                            :err :string}
+                     cmd)))]
+    (fn [request]
+      (fs/with-temp-dir [out-dir {:prefix "transform-tei-"}]
+        (let [tempfile (get-in request [:params "file" :tempfile])
+              out-path (fs/path out-dir "out")
+              {:keys [exit err]} (exec tempfile out-path)]
+
+          (if (zero? exit)
+            (do
+              ;; Move the output into the input `tempfile` because it's
+              ;; being tracked for deletion by ring.middleware.multipart-params.temp-file
+              ;; Very cheesey, but effective
+              (fs/move out-path tempfile {:replace-existing true})
+              {:status 200
+               :body tempfile})
+            {:status 500
+             :body (str "Failed transform (exit code " exit "): " err)}))))))
 
 (def transform-tei-handlers
   (into {}
         (map (juxt fs/file-name transform-tei-handler))
-        (fs/list-dir "bin")))
+        (fs/list-dir bin-folder)))
 
 (defn handler [request]
   (let [{:keys [request-method uri]} request
