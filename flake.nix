@@ -27,6 +27,11 @@
             mkdir -p $out/app
             cp -r ${self}/. $out/app
           '';
+          entrypoint = pkgs.writeShellScriptBin "entrypoint" ''
+            #!/bin/bash
+            mkdir -p -m 1777 /tmp
+            java -jar target/stylesheets.jar
+          '';
       in {
         packages = { inherit runtimePkgs; };
         devShells.default = pkgs.mkShell {
@@ -37,12 +42,12 @@
           tag = "latest";
           contents = pkgs.buildEnv {
             name = "image-root";
-            paths = runtimePkgs ++ [ app pkgs.bash pkgs.coreutils];
+            paths = runtimePkgs ++ [ app entrypoint pkgs.bash pkgs.coreutils];
             pathsToLink = [ "/bin" "/etc" "/var" "/app" ];
           };
           config = {
             WorkingDir = "/app";
-            Cmd = ["/bin/java" "-jar" "target/stylesheets.jar"];
+            Cmd = [ "${entrypoint}/bin/entrypoint" ];
             ExposedPorts = { "7979/tcp" = {}; };
           };
         };
