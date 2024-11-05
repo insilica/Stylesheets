@@ -16,6 +16,7 @@
       let pkgs = nixpkgs.legacyPackages.${system};
           runtimePkgs = [
             pkgs.ant
+            pkgs.gnused
             pkgs.jdk11
             pkgs.libxml2
             pkgs.nodejs
